@@ -1,37 +1,24 @@
 import getBlobDuration from 'get-blob-duration';
-
-import type {Base64String, CurrentRecordingStatus, GenericResponse, RecordingData} from './definitions';
-import {
-    alreadyRecordingError,
-    couldNotQueryPermissionStatusError,
-    deviceCannotVoiceRecordError,
-    emptyRecordingError,
-    failedToFetchRecordingError,
-    failedToRecordError,
-    failureResponse,
-    recordingHasNotStartedError,
-    successResponse,
-} from './predefined-web-responses';
-
+import { alreadyRecordingError, couldNotQueryPermissionStatusError, deviceCannotVoiceRecordError, emptyRecordingError, failedToFetchRecordingError, failedToRecordError, failureResponse, recordingHasNotStartedError, successResponse, } from './predefined-web-responses';
 // these mime types will be checked one by one in order until one of them is found to be supported by the current browser
 const possibleMimeTypes = ['audio/aac', 'audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'];
-const neverResolvingPromise = (): Promise<any> => new Promise(() => undefined);
-
+const neverResolvingPromise = () => new Promise(() => undefined);
 export class VoiceRecorderImpl {
-
-    private mediaRecorder: MediaRecorder | null = null;
-    private chunks: any[] = [];
-    private pendingResult: Promise<RecordingData> = neverResolvingPromise();
-
-    public static async canDeviceVoiceRecord(): Promise<GenericResponse> {
-        if (navigator?.mediaDevices?.getUserMedia == null || VoiceRecorderImpl.getSupportedMimeType() == null) {
+    constructor() {
+        this.mediaRecorder = null;
+        this.chunks = [];
+        this.pendingResult = neverResolvingPromise();
+    }
+    static async canDeviceVoiceRecord() {
+        var _a;
+        if (((_a = navigator === null || navigator === void 0 ? void 0 : navigator.mediaDevices) === null || _a === void 0 ? void 0 : _a.getUserMedia) == null || VoiceRecorderImpl.getSupportedMimeType() == null) {
             return failureResponse();
-        } else {
+        }
+        else {
             return successResponse();
         }
     }
-
-    public async startRecording(): Promise<GenericResponse> {
+    async startRecording() {
         if (this.mediaRecorder != null) {
             throw alreadyRecordingError();
         }
@@ -43,90 +30,89 @@ export class VoiceRecorderImpl {
         // if (!havingPermission.value) {
         //     throw missingPermissionError();
         // }
-
-        return navigator.mediaDevices.getUserMedia({audio: true})
+        return navigator.mediaDevices.getUserMedia({ audio: true })
             .then(this.onSuccessfullyStartedRecording.bind(this))
             .catch(this.onFailedToStartRecording.bind(this));
     }
-
-    public async stopRecording(): Promise<RecordingData> {
+    async stopRecording() {
         if (this.mediaRecorder == null) {
             throw recordingHasNotStartedError();
         }
         try {
             this.mediaRecorder.stop();
-            this.mediaRecorder.stream.getTracks().forEach(track=> track.stop());
+            this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
             return this.pendingResult;
-        } catch (ignore) {
+        }
+        catch (ignore) {
             throw failedToFetchRecordingError();
-        } finally {
+        }
+        finally {
             this.prepareInstanceForNextOperation();
         }
     }
-
-    public static async hasAudioRecordingPermission(): Promise<GenericResponse> {
-        return navigator.permissions.query({name: 'microphone' as any})
-            .then(result => ({value: result.state === 'granted'}))
+    static async hasAudioRecordingPermission() {
+        return navigator.permissions.query({ name: 'microphone' })
+            .then(result => ({ value: result.state === 'granted' }))
             .catch(() => {
-                throw couldNotQueryPermissionStatusError();
-            });
+            throw couldNotQueryPermissionStatusError();
+        });
     }
-
-    public static async requestAudioRecordingPermission(): Promise<GenericResponse> {
+    static async requestAudioRecordingPermission() {
         const havingPermission = await VoiceRecorderImpl.hasAudioRecordingPermission().catch(() => failureResponse());
         if (havingPermission.value) {
             return successResponse();
         }
-
         return successResponse();
-
         // no need to check for permission on web (avoid creating multiple streams)
         // return navigator.mediaDevices.getUserMedia({audio: true})
         //     .then(() => successResponse())
         //     .catch(() => failureResponse());
     }
-
-    public pauseRecording(): Promise<GenericResponse> {
+    pauseRecording() {
         if (this.mediaRecorder == null) {
             throw recordingHasNotStartedError();
-        } else if (this.mediaRecorder.state === 'recording') {
+        }
+        else if (this.mediaRecorder.state === 'recording') {
             this.mediaRecorder.pause();
             return Promise.resolve(successResponse());
-        } else {
+        }
+        else {
             return Promise.resolve(failureResponse());
         }
     }
-
-    public resumeRecording(): Promise<GenericResponse> {
+    resumeRecording() {
         if (this.mediaRecorder == null) {
             throw recordingHasNotStartedError();
-        } else if (this.mediaRecorder.state === 'paused') {
+        }
+        else if (this.mediaRecorder.state === 'paused') {
             this.mediaRecorder.resume();
             return Promise.resolve(successResponse());
-        } else {
+        }
+        else {
             return Promise.resolve(failureResponse());
         }
     }
-
-    public getCurrentStatus(): Promise<CurrentRecordingStatus> {
+    getCurrentStatus() {
         if (this.mediaRecorder == null) {
-            return Promise.resolve({status: 'NONE'});
-        } else if (this.mediaRecorder.state === 'recording') {
-            return Promise.resolve({status: 'RECORDING'});
-        } else if (this.mediaRecorder.state === 'paused') {
-            return Promise.resolve({status: 'PAUSED'});
-        } else {
-            return Promise.resolve({status: 'NONE'});
+            return Promise.resolve({ status: 'NONE' });
+        }
+        else if (this.mediaRecorder.state === 'recording') {
+            return Promise.resolve({ status: 'RECORDING' });
+        }
+        else if (this.mediaRecorder.state === 'paused') {
+            return Promise.resolve({ status: 'PAUSED' });
+        }
+        else {
+            return Promise.resolve({ status: 'NONE' });
         }
     }
-
-    public static getSupportedMimeType(): string | null {
-        if (MediaRecorder?.isTypeSupported == null) return null;
+    static getSupportedMimeType() {
+        if ((MediaRecorder === null || MediaRecorder === void 0 ? void 0 : MediaRecorder.isTypeSupported) == null)
+            return null;
         const foundSupportedType = possibleMimeTypes.find(type => MediaRecorder.isTypeSupported(type));
-        return foundSupportedType ?? null;
+        return foundSupportedType !== null && foundSupportedType !== void 0 ? foundSupportedType : null;
     }
-
-    private onSuccessfullyStartedRecording(stream: MediaStream): GenericResponse {
+    onSuccessfullyStartedRecording(stream) {
         this.pendingResult = new Promise((resolve, reject) => {
             this.mediaRecorder = new MediaRecorder(stream);
             this.mediaRecorder.onerror = () => {
@@ -140,7 +126,7 @@ export class VoiceRecorderImpl {
                     reject(failedToFetchRecordingError());
                     return;
                 }
-                const blobVoiceRecording = new Blob(this.chunks, {'type': mimeType});
+                const blobVoiceRecording = new Blob(this.chunks, { 'type': mimeType });
                 if (blobVoiceRecording.size <= 0) {
                     this.prepareInstanceForNextOperation();
                     reject(emptyRecordingError());
@@ -149,20 +135,18 @@ export class VoiceRecorderImpl {
                 const recordDataBase64 = await VoiceRecorderImpl.blobToBase64(blobVoiceRecording);
                 const recordingDuration = await getBlobDuration(blobVoiceRecording);
                 this.prepareInstanceForNextOperation();
-                resolve({value: {recordDataBase64, mimeType, msDuration: recordingDuration * 1000}});
+                resolve({ value: { recordDataBase64, mimeType, msDuration: recordingDuration * 1000 } });
             };
-            this.mediaRecorder.ondataavailable = (event: any) => this.chunks.push(event.data);
+            this.mediaRecorder.ondataavailable = (event) => this.chunks.push(event.data);
             this.mediaRecorder.start();
         });
         return successResponse();
     }
-
-    private onFailedToStartRecording(): GenericResponse {
+    onFailedToStartRecording() {
         this.prepareInstanceForNextOperation();
         throw failedToRecordError();
     }
-
-    private static blobToBase64(blob: Blob): Promise<Base64String> {
+    static blobToBase64(blob) {
         return new Promise(resolve => {
             const reader = new FileReader();
             reader.onloadend = () => {
@@ -174,17 +158,17 @@ export class VoiceRecorderImpl {
             reader.readAsDataURL(blob);
         });
     }
-
-    private prepareInstanceForNextOperation(): void {
+    prepareInstanceForNextOperation() {
         if (this.mediaRecorder != null && this.mediaRecorder.state === 'recording') {
             try {
                 this.mediaRecorder.stop();
-                this.mediaRecorder.stream.getTracks().forEach(track=> track.stop());
-            } catch (ignore) {}
+                this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+            catch (ignore) { }
         }
         this.pendingResult = neverResolvingPromise();
         this.mediaRecorder = null;
         this.chunks = [];
     }
-
 }
+//# sourceMappingURL=VoiceRecorderImpl.js.map
